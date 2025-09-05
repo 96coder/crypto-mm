@@ -321,6 +321,40 @@ function computeCombinedSignal(prices) {
   return { label, cls, confidence, forecast, indicators: ind, score };
 }
 
+function hourAtrApprox(prices, period = 14) {
+  if (!prices || prices.length < period + 1) return null;
+  let sum = 0;
+  for (let i = prices.length - period; i < prices.length; i++) {
+    sum += Math.abs(prices[i] - prices[i - 1]);
+  }
+  return sum / period;
+}
+
+function computeTargets1h(prices, currentPrice, sig) {
+  const atr1h = hourAtrApprox(prices, 14);
+  if (!atr1h || !currentPrice) return null;
+  let dir = 0; // 1 up, -1 down, 0 neutral
+  if (sig?.model?.prob != null) {
+    if (sig.model.prob > 0.55) dir = 1; else if (sig.model.prob < 0.45) dir = -1;
+  } else if (sig?.cls) {
+    dir = sig.cls === 'bull' ? 1 : sig.cls === 'bear' ? -1 : 0;
+  }
+  const m = [0.5, 1.0, 1.5];
+  if (dir === 0) {
+    return {
+      side: 'neutral',
+      tpUp: m.map(k => Number(currentPrice + k * atr1h)),
+      tpDown: m.map(k => Number(currentPrice - k * atr1h)),
+      slUp: Number(currentPrice - 1.0 * atr1h),
+      slDown: Number(currentPrice + 1.0 * atr1h),
+    };
+  }
+  const sign = dir === 1 ? 1 : -1;
+  const tp = m.map(k => Number(currentPrice + sign * k * atr1h));
+  const sl = Number(currentPrice - sign * 1.0 * atr1h);
+  return { side: dir === 1 ? 'long' : 'short', tp, sl };
+}
+
 function drawSparkline(canvas, data, color) {
   if (!canvas || !data || data.length < 2) return;
   const ctx = canvas.getContext('2d');
@@ -396,15 +430,54 @@ function render() {
         <div class="small">${sig.forecast ? `24h: ${fmtCurrency(sig.forecast, state.vs)} (${forecastPct.toFixed(1)}%)` : '24h: —'}</div>
       </div>
       <div class="indicators">
-        <div title="Exponential Moving Averages">EMA7/14: <span class="${sig.indicators && sig.indicators.ema7 > sig.indicators.ema14 ? 'pos' : 'neg'}">${sig.indicators ? (sig.indicators.ema7 > sig.indicators.ema14 ? '↑' : '↓') : '—'}</span></div>
-        <div title="Relative Strength Index">RSI14: <strong>${sig.indicators?.rsi ? sig.indicators.rsi.toFixed(0) : '—'}</strong></div>
-        <div title="MACD Histogram">MACD: <span class="${sig.indicators?.macd?.hist >= 0 ? 'pos' : 'neg'}">${sig.indicators?.macd ? sig.indicators.macd.hist.toFixed(2) : '—'}</span></div>
-        <div title="Bollinger %B">BB%B: <strong>${sig.indicators?.bb ? (sig.indicators.bb.pctB * 100).toFixed(0) : '—'}</strong></div>
-        <div title="ATR approx %">ATR%: <strong>${sig.indicators?.atr && c.current_price ? ((sig.indicators.atr / c.current_price) * 100).toFixed(1) : '—'}</strong></div>
-        ${sig.model ? `<div title="Model probability">Model: <strong>${(sig.model.prob * 100).toFixed(0)}%</strong> ↑ • Exp: <strong>${(sig.model.expRet * 100).toFixed(1)}%</strong></div>` : ''}
-        ${sig.model && sig.model.adx ? `<div title="Average Directional Index">ADX: <strong>${Number(sig.model.adx).toFixed(0)}</strong>${(sig.model.plusDi!=null && sig.model.minusDi!=null) ? ` <span class="${sig.model.plusDi>=sig.model.minusDi ? 'pos' : 'neg'}">${sig.model.plusDi>=sig.model.minusDi ? '+DI' : '-DI'}</span>` : ''}</div>` : ''}
+        <div title="Exponential Moving Averages">📈 EMA7/14: <span class="${sig.indicators && sig.indicators.ema7 > sig.indicators.ema14 ? 'pos' : 'neg'}">${sig.indicators ? (sig.indicators.ema7 > sig.indicators.ema14 ? '↑' : '↓') : '—'}</span></div>
+        <div title="Relative Strength Index">📊 RSI14: <strong>${sig.indicators?.rsi ? sig.indicators.rsi.toFixed(0) : '—'}</strong></div>
+        <div title="MACD Histogram">〽️ MACD: <span class="${sig.indicators?.macd?.hist >= 0 ? 'pos' : 'neg'}">${sig.indicators?.macd ? sig.indicators.macd.hist.toFixed(2) : '—'}</span></div>
+        <div title="Bollinger %B">🔔 BB%B: <strong>${sig.indicators?.bb ? (sig.indicators.bb.pctB * 100).toFixed(0) : '—'}</strong></div>
+        <div title="ATR approx %">🌊 ATR%: <strong>${sig.indicators?.atr && c.current_price ? ((sig.indicators.atr / c.current_price) * 100).toFixed(1) : '—'}</strong></div>
+        ${sig.model ? `<div title="Model probability">🤖 Model: <strong>${(sig.model.prob * 100).toFixed(0)}%</strong> ↑ • Exp: <strong>${(sig.model.expRet * 100).toFixed(1)}%</strong></div>` : ''}
+        ${sig.model && sig.model.adx ? `<div title="Average Directional Index">🧭 ADX: <strong>${Number(sig.model.adx).toFixed(0)}</strong>${(sig.model.plusDi!=null && sig.model.minusDi!=null) ? ` <span class="${sig.model.plusDi>=sig.model.minusDi ? 'pos' : 'neg'}">${sig.model.plusDi>=sig.model.minusDi ? '+DI' : '-DI'}</span>` : ''}</div>` : ''}
       </div>
     `;
+    // Append 1h TP/SL targets
+    const targets1h = computeTargets1h(spark, c.current_price, sig);
+    if (targets1h) {
+      const container = document.createElement('div');
+      container.className = 'targets';
+      const levels = document.createElement('div');
+      levels.className = 'levels';
+      const label = document.createElement('div');
+      label.className = 'small';
+      label.textContent = '⏱ 1h Targets';
+      container.appendChild(label);
+      if (targets1h.side === 'long' || targets1h.side === 'neutral') {
+        const ups = targets1h.side === 'neutral' ? targets1h.tpUp : targets1h.tp;
+        if (ups) ups.forEach((p, i) => {
+          const chip = document.createElement('span');
+          chip.className = 'chip up';
+          chip.title = `TP${i+1}`;
+          chip.textContent = `🎯 TP${i+1}: ${fmtCurrency(p, state.vs)}`;
+          levels.appendChild(chip);
+        });
+      }
+      if (targets1h.side === 'short' || targets1h.side === 'neutral') {
+        const dns = targets1h.side === 'neutral' ? targets1h.tpDown : targets1h.tp;
+        if (dns) dns.forEach((p, i) => {
+          const chip = document.createElement('span');
+          chip.className = 'chip down';
+          chip.title = `TP${i+1}`;
+          chip.textContent = `🎯 TP${i+1}: ${fmtCurrency(p, state.vs)}`;
+          levels.appendChild(chip);
+        });
+      }
+      const slChip = document.createElement('span');
+      slChip.className = `chip ${targets1h.side==='short' ? 'up' : targets1h.side==='long' ? 'down' : ''}`;
+      slChip.title = 'Stop Loss';
+      slChip.textContent = `🛡 SL: ${fmtCurrency(targets1h.side==='neutral' ? c.current_price : targets1h.sl, state.vs)}`;
+      levels.appendChild(slChip);
+      container.appendChild(levels);
+      card.appendChild(container);
+    }
     els.cards.appendChild(card);
     const canvas = card.querySelector('canvas.spark');
     drawSparkline(canvas, spark, chg >= 0 ? '#1cc8a0' : '#ef476f');

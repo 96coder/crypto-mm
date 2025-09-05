@@ -10,12 +10,14 @@ Overview
   - BB/ATR/StochRSI: Bollinger Bands %B/width, ATR% approx, StochRSI
   - Multi-timeframe: 1h base with 4h/daily EMA trend confluence
   - Combined signal: blends EMA trend, MACD relation/momentum, RSI/BB/ATR/StochRSI, higher-timeframe confluence; regression adds confidence and 24h forecast
+- 1h TP/SL: Per-coin 1h targets using recent hourly ATR-like volatility
 - Pure static site: open in a browser or serve as static files.
 
 Files
 - `index.html`: Main page and controls (currency, search, refresh).
 - `styles.css`: Dark-theme styling and card layout.
 - `app.js`: Data fetching, rendering, sparkline drawing, and predictions.
+  - Also computes 1h TP/SL using recent hourly ATR: TP1/TP2/TP3 at 0.5×/1.0×/1.5× ATR in the signal direction; SL at 1.0× ATR opposite.
 
 Run Locally
 Option 1: Open `index.html` directly in a browser.
@@ -33,6 +35,7 @@ Notes on Data & Predictions
   - RSI: Zone-based contribution (55–70 supportive, <45 weak, >70 overbought, <30 mean-reversion bias).
   - Forecast: Linear regression over ~last 60 sparkline points (≈ 60 hours) extrapolated ~24 hours.
   - Confidence: Blend of signal strength and regression R² (5–95%).
+  - 1h TP/SL: Derived from recent hourly close-to-close ATR approximation; direction uses model probability if present (>55% long, <45% short), else combined signal.
 
 Customize
 - Change `PER_PAGE` in `app.js` to show more/less top coins.
