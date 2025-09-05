@@ -25,6 +25,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy scikit-learn
       - name: Build predictions.json
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ALERT_PROB_HIGH: ${{ vars.ALERT_PROB_HIGH }}
+          ALERT_PROB_LOW: ${{ vars.ALERT_PROB_LOW }}
         run: |
           python3 scripts/predict.py
       - name: Commit predictions

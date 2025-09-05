@@ -13,6 +13,20 @@ Overview
 - 1h TP/SL: Per-coin 1h targets using recent hourly ATR-like volatility
 - Pure static site: open in a browser or serve as static files.
 
+Guides
+- A guides hub is available at `guides.html` with a sidebar list, search, and an article reader.
+- The reader supports headings, lists, code blocks, links, blockquotes, and builds a simple in-page TOC.
+- Add your `.md` files under `guide/` or `guides/`. A GitHub Action auto-builds `index.json` for the sidebar.
+  - Script: `scripts/build_guides_index.py`
+  - Workflow: `.github/workflows/guides.yml`
+  - On each push (or manual run), it scans markdown, extracts the first `# Heading` as title and first paragraph as description, and writes `guide/index.json` or `guides/index.json`.
+- The `guides.html` page tries `guide/index.json` first, then `guides/index.json`.
+
+Troubleshooting (Guides)
+- Serve over HTTP. Opening via file:// blocks fetch(). Run: `python3 -m http.server 5173` then open `http://localhost:5173/guides.html`.
+- Build the index: `python3 scripts/build_guides_index.py` to create `guide/index.json` or `guides/index.json`.
+- Fallback: If no index is found, the app tries `guide/README.md` or `guides/README.md`. If still blank, ensure your markdown files are inside `guide/` or `guides/` and named correctly.
+
 Files
 - `index.html`: Main page and controls (currency, search, refresh).
 - `styles.css`: Dark-theme styling and card layout.
@@ -56,10 +70,14 @@ Predictions Pipeline (optional)
 - Workflow: `.github/workflows/predict.yml` runs every 6 hours (and on manual dispatch).
 - Script: `scripts/predict.py` builds a dataset per coin:
   - Data: Paginates Binance 1h klines to ~5000 bars (~200 days) for USDT pairs; gracefully falls back to CoinGecko hourly prices if missing.
-  - Features: EMA(7/14/50), RSI(14), MACD(12/26/9), Bollinger width, ATR% (Wilder), ADX(14) with +DI/−DI, 24h momentum, volume change, plus BTC regime features (BTC EMA7/EMA14 trend, BTC 24h momentum, relative momentum vs BTC, BTC ATR%).
-  - Model: HistGradientBoostingClassifier with TimeSeriesSplit (walk‑forward) for AUC; tuned params with early stopping. Retrains on all data for the latest prediction. Outputs `prob_up`, `exp_return` (scaled by median |24h return|), `auc`, and latest `adx`/`+di`/`-di` when OHLCV is available.
+  - Features: EMA(7/14/50), RSI(14), MACD(12/26/9), Bollinger width, ATR% (Wilder), ADX(14) with +DI/−DI, 24h momentum, volume change, plus BTC regime features (BTC EMA7/EMA14 trend, BTC 1h/24h momentum, relative momentum vs BTC, BTC ATR%).
+  - Models:
+    - Classifier: HistGradientBoostingClassifier, walk‑forward AUC; outputs `prob_up`, `exp_return`.
+    - Quantile regressors: 1h forward return quantiles (q20/q50/q80) via GradientBoostingRegressor; outputs under `q1h` per coin.
+  - Output: `predictions.json` with `prob_up`, `exp_return`, `auc`, optional `adx`/`+di`/`-di`, and `q1h`.
 - Frontend: If `predictions.json` exists, the app shows model probability and expected 24h return per coin and blends it into the combined signal.
   - Also surfaces ADX and DI direction from predictions when available.
+  - TP/SL: 1h TP/SL targets prefer quantile returns (`q1h`) when present; falls back to ATR bands otherwise.
 - Tuning: Adjust TOP_N, MAX_BARS, and model hyperparams in the script as desired.
 
  Notes
@@ -71,3 +89,9 @@ This project is for educational purposes only. No financial advice.
 
 Support / Donations
 - USDT (TRC20): `TLbwVrZyaZujcTCXAb94t6k7BrvChVfxzi`
+Alerts (Telegram/Discord)
+- The predictions workflow can post alerts when strong signals appear (default: prob_up ≥ 0.65 or ≤ 0.35).
+- Add repo secrets/vars and the workflow will send alerts automatically:
+  - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and/or `DISCORD_WEBHOOK_URL`
+  - Optional repo variables: `ALERT_PROB_HIGH`, `ALERT_PROB_LOW` to tune thresholds
+  - Messages include top 5 strongest signals with probability, expected return, and ADX if available

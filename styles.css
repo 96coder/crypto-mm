@@ -9,6 +9,8 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.
 .titles h1{margin:0;font-size:18px}
 .subtitle{margin:0;color:var(--muted);font-size:12px}
 .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.nav-link{color:var(--text);text-decoration:none;border:1px solid var(--border);padding:6px 10px;border-radius:8px}
+.nav-link:hover{border-color:var(--blue)}
 .control-group{display:flex;flex-direction:column;gap:6px}
 label{font-size:12px;color:var(--muted)}
 select,input{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:120px}
@@ -60,4 +62,18 @@ input[type="search"]{min-width:220px}
 .copy-btn:hover{border-color:var(--blue)}
 .copy-toast{color:var(--green);font-size:12px}
 .qr-img{width:120px;height:120px;border:1px solid var(--border);border-radius:8px;background:var(--card);object-fit:contain}
+
+/* Detail Modal */
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:color-mix(in srgb, #000 50%, transparent);z-index:100}
+.modal.open{display:flex}
+.modal .panel{width:min(920px, 96vw);max-height:92vh;background:var(--panel);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.modal .header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border)}
+.modal .title{display:flex;align-items:center;gap:10px}
+.modal .title img{width:24px;height:24px;border-radius:50%}
+.modal .body{padding:12px;display:flex;flex-direction:column;gap:10px}
+.chart-lg{width:100%;height:280px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.rowline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.close-btn{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer}
+.btn{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer}
+.btn:hover,.close-btn:hover{border-color:var(--blue)}
 @media (max-width:680px){.controls{width:100%;justify-content:flex-start}.app-header{gap:10px}.legend{flex-direction:column;align-items:flex-start;gap:6px}}

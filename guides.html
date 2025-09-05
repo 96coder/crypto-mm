@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guides — Crypto Myanmar</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .guides-layout{display:grid;grid-template-columns:280px 1fr;gap:14px;max-width:1100px;margin:18px auto;padding:0 16px}
+      .guides-sidebar{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+      .guides-sidebar header{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:700}
+      .guide-list{list-style:none;margin:0;padding:0;max-height:calc(100vh - 200px);overflow:auto}
+      .guide-list li{border-top:1px solid var(--border)}
+      .guide-list button{width:100%;text-align:left;display:block;padding:10px 12px;background:transparent;color:var(--text);border:none;cursor:pointer}
+      .guide-list button:hover{background:rgba(255,255,255,0.03)}
+      .guides-content{background:var(--panel);border:1px solid var(--border);border-radius:12px;min-height:60vh;overflow:hidden}
+      .guides-content header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)}
+      .article{display:grid;grid-template-columns: minmax(0,1fr) 240px}
+      .article main{padding:16px}
+      .article aside{border-left:1px solid var(--border);padding:16px;display:none}
+      .toc h4{margin:0 0 8px 0}
+      .toc ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+      .toc a{color:var(--muted);text-decoration:none}
+      .toc a:hover{color:var(--text)}
+      .md h1,.md h2,.md h3{margin:18px 0 8px}
+      .md p{margin:10px 0}
+      .md code{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;background:var(--card);border:1px solid var(--border);padding:2px 4px;border-radius:4px}
+      .md pre{background:var(--card);border:1px solid var(--border);padding:10px;border-radius:8px;overflow:auto}
+      .md pre code{background:transparent;border:none;padding:0}
+      .md blockquote{border-left:3px solid var(--border);margin:8px 0;padding:6px 10px;color:var(--muted);background:rgba(255,255,255,0.02)}
+      .md ul,.md ol{padding-left:20px}
+      .guide-meta{color:var(--muted);font-size:12px}
+      @media(max-width:900px){.guides-layout{grid-template-columns:1fr}.article{grid-template-columns:1fr}.article aside{display:none}}
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">₿</div>
+        <div class="titles">
+          <h1>Guides</h1>
+          <p class="subtitle">Learn crypto basics, strategy, and more</p>
+        </div>
+      </div>
+      <div class="controls">
+        <a class="nav-link" href="index.html">← Back to Markets</a>
+      </div>
+    </header>
+
+    <div class="guides-layout">
+      <aside class="guides-sidebar">
+        <header>All Guides</header>
+        <ul id="guideList" class="guide-list"></ul>
+      </aside>
+      <section class="guides-content">
+        <header>
+          <div>
+            <div id="guideTitle" class="name">Pick a guide</div>
+            <div id="guideMeta" class="guide-meta">—</div>
+          </div>
+          <div class="controls">
+            <input id="guideSearch" type="search" placeholder="Search guides..." />
+          </div>
+        </header>
+        <div class="article">
+          <main class="md" id="guideBody"></main>
+          <aside>
+            <div class="toc">
+              <h4>On this page</h4>
+              <div id="guideToc"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <script src="guides.js"></script>
+  </body>
+  </html>
+

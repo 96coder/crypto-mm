@@ -18,6 +18,7 @@
       </div>
 
       <div class="controls">
+        <a class="nav-link" href="guides.html" title="Guides">📘 Guides</a>
         <div class="control-group">
           <label for="currency">Currency</label>
           <select id="currency">
@@ -81,6 +82,26 @@
         <span id="copyToast" class="copy-toast" aria-live="polite" hidden>Copied!</span>
       </div>
     </footer>
+
+    <div id="detailModal" class="modal" aria-hidden="true">
+      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <div class="header">
+          <div class="title">
+            <img id="detailIcon" alt="" />
+            <div>
+              <div id="detailTitle" class="name">—</div>
+              <div id="detailSubtitle" class="sym">—</div>
+            </div>
+          </div>
+          <button id="detailClose" class="close-btn" aria-label="Close">Close</button>
+        </div>
+        <div class="body">
+          <canvas id="detailChart" class="chart-lg"></canvas>
+          <div id="detailInfo" class="rowline">—</div>
+          <div id="detailTargets" class="levels"></div>
+        </div>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

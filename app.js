@@ -17,6 +17,14 @@ const els = {
   copyToast: document.getElementById('copyToast'),
   showQr: document.getElementById('showQr'),
   qrImg: document.getElementById('qrImg'),
+  detailModal: document.getElementById('detailModal'),
+  detailClose: document.getElementById('detailClose'),
+  detailChart: document.getElementById('detailChart'),
+  detailTitle: document.getElementById('detailTitle'),
+  detailSubtitle: document.getElementById('detailSubtitle'),
+  detailIcon: document.getElementById('detailIcon'),
+  detailInfo: document.getElementById('detailInfo'),
+  detailTargets: document.getElementById('detailTargets'),
 };
 
 let state = {
@@ -336,14 +344,35 @@ function hourAtrApprox(prices, period = 14) {
 }
 
 function computeTargets1h(prices, currentPrice, sig) {
-  const atr1h = hourAtrApprox(prices, 14);
-  if (!atr1h || !currentPrice) return null;
+  if (!currentPrice) return null;
   let dir = 0; // 1 up, -1 down, 0 neutral
   if (sig?.model?.prob != null) {
     if (sig.model.prob > 0.55) dir = 1; else if (sig.model.prob < 0.45) dir = -1;
   } else if (sig?.cls) {
     dir = sig.cls === 'bull' ? 1 : sig.cls === 'bear' ? -1 : 0;
   }
+  // Prefer model quantiles if available
+  const q = sig?.model?.q1h;
+  if (q && (typeof q.q20 === 'number') && (typeof q.q50 === 'number') && (typeof q.q80 === 'number')) {
+    if (dir === 0) {
+      // symmetric reference bands
+      const ups = [q.q20, q.q50, q.q80].map(r => currentPrice * (1 + Math.max(0, r)));
+      const dns = [q.q20, q.q50, q.q80].map(r => currentPrice * (1 + Math.min(0, r)));
+      return { side: 'neutral', tpUp: ups, tpDown: dns, slUp: currentPrice * (1 + Math.min(0, q.q20)), slDown: currentPrice * (1 + Math.max(0, q.q80)) };
+    }
+    if (dir === 1) {
+      const tp = [q.q20, q.q50, q.q80].map(r => currentPrice * (1 + Math.max(0, r)));
+      const sl = currentPrice * (1 + Math.min(0, q.q20));
+      return { side: 'long', tp, sl };
+    } else {
+      const tp = [q.q20, q.q50, q.q80].map(r => currentPrice * (1 + Math.min(0, r)));
+      const sl = currentPrice * (1 + Math.max(0, q.q80));
+      return { side: 'short', tp, sl };
+    }
+  }
+  // Fallback to ATR-based targets
+  const atr1h = hourAtrApprox(prices, 14);
+  if (!atr1h) return null;
   const m = [0.5, 1.0, 1.5];
   if (dir === 0) {
     return {
@@ -382,6 +411,138 @@ function drawSparkline(canvas, data, color) {
   ctx.stroke();
 }
 
+function emaSeries(values, period) {
+  if (!values || values.length === 0) return [];
+  const k = 2 / (period + 1);
+  const seedLen = Math.min(period, values.length);
+  let ema = values.slice(0, seedLen).reduce((a,b)=>a+b,0) / seedLen;
+  const out = new Array(values.length).fill(null);
+  out[seedLen - 1] = ema;
+  for (let i = seedLen; i < values.length; i++) {
+    ema = values[i] * k + ema * (1 - k);
+    out[i] = ema;
+  }
+  return out;
+}
+
+function drawDetailChart(canvas, prices, overlays) {
+  if (!canvas || !prices || prices.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+  const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+  const pad = 10 * devicePixelRatio;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const sx = (w - pad * 2) / (prices.length - 1);
+  const sy = max === min ? 0 : (h - pad * 2) / (max - min);
+  ctx.clearRect(0,0,w,h);
+  // price line
+  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.strokeStyle = '#4aa8ff';
+  ctx.beginPath();
+  for (let i = 0; i < prices.length; i++) {
+    const x = pad + i * sx;
+    const y = h - pad - (prices[i] - min) * sy;
+    if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // EMAs
+  const emaColors = { e7: '#1cc8a0', e14: '#f7b500', e20: '#ef476f' };
+  for (const [key, series] of Object.entries(overlays.emas || {})) {
+    if (!series) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = emaColors[key] || '#aaa';
+    ctx.lineWidth = 1.5 * devicePixelRatio;
+    for (let i = 0; i < series.length; i++) {
+      if (series[i] == null) continue;
+      const x = pad + i * sx;
+      const y = h - pad - (series[i] - min) * sy;
+      if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  // Horizontal TP/SL
+  if (overlays.levels && overlays.levels.length) {
+    for (const lvl of overlays.levels) {
+      const y = h - pad - (lvl.price - min) * sy;
+      ctx.strokeStyle = lvl.color;
+      ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
+      ctx.lineWidth = 1 * devicePixelRatio;
+      ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w - pad, y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function openDetailModal(coin, spark, sig) {
+  if (!els.detailModal) return;
+  els.detailIcon.src = coin.image;
+  els.detailIcon.alt = coin.symbol;
+  els.detailTitle.textContent = `${coin.name} — ${fmtCurrency(coin.current_price, state.vs)}`;
+  els.detailSubtitle.textContent = `${coin.symbol.toUpperCase()} • ${sig.label} • Conf ${(sig.confidence*100).toFixed(0)}%`;
+  // Build overlays
+  const e7 = emaSeries(spark, 7);
+  const e14 = emaSeries(spark, 14);
+  const e20 = emaSeries(spark, 20);
+  const targets = computeTargets1h(spark, coin.current_price, sig);
+  // Info line
+  const parts = [];
+  if (sig.indicators?.rsi != null) parts.push(`RSI ${sig.indicators.rsi.toFixed(0)}`);
+  if (sig.indicators?.macd) parts.push(`MACD hist ${sig.indicators.macd.hist.toFixed(2)}`);
+  if (sig.model) parts.push(`Model ${(sig.model.prob*100).toFixed(0)}% • Exp ${(sig.model.expRet*100).toFixed(1)}%`);
+  if (sig.model?.adx != null) parts.push(`ADX ${Number(sig.model.adx).toFixed(0)}`);
+  els.detailInfo.textContent = parts.join('  •  ');
+  // Targets chips
+  els.detailTargets.innerHTML = '';
+  if (targets) {
+    const addChip = (cls, label, value) => {
+      const el = document.createElement('span'); el.className = `chip ${cls}`; el.textContent = `${label}: ${fmtCurrency(value, state.vs)}`; els.detailTargets.appendChild(el);
+    };
+    if (targets.side === 'long' || targets.side === 'neutral') {
+      const ups = targets.side === 'neutral' ? targets.tpUp : targets.tp;
+      ups?.forEach((v,i)=> addChip('up', `TP${i+1}`, v));
+    }
+    if (targets.side === 'short' || targets.side === 'neutral') {
+      const dns = targets.side === 'neutral' ? targets.tpDown : targets.tp;
+      dns?.forEach((v,i)=> addChip('down', `TP${i+1}`, v));
+    }
+    if (targets.side === 'neutral') {
+      addChip('down', 'SL↑', targets.slDown);
+      addChip('up', 'SL↓', targets.slUp);
+    } else {
+      addChip(targets.side==='long' ? 'down' : 'up', 'SL', targets.sl);
+    }
+  }
+  // Chart
+  const levels = [];
+  if (targets) {
+    const colUp = '#1cc8a0', colDown = '#ef476f';
+    if (targets.side === 'long' || targets.side === 'neutral') {
+      (targets.side==='neutral' ? targets.tpUp : targets.tp)?.forEach(v => levels.push({ price: v, color: colUp }));
+    }
+    if (targets.side === 'short' || targets.side === 'neutral') {
+      (targets.side==='neutral' ? targets.tpDown : targets.tp)?.forEach(v => levels.push({ price: v, color: colDown }));
+    }
+    if (targets.side === 'neutral') {
+      levels.push({ price: targets.slUp, color: colDown });
+      levels.push({ price: targets.slDown, color: colUp });
+    } else {
+      levels.push({ price: targets.sl, color: targets.side==='long' ? colDown : colUp });
+    }
+  }
+  drawDetailChart(els.detailChart, spark, { emas: { e7, e14, e20 }, levels });
+
+  // Open modal
+  els.detailModal.classList.add('open');
+  els.detailModal.removeAttribute('aria-hidden');
+}
+
+function closeDetailModal() {
+  if (!els.detailModal) return;
+  els.detailModal.classList.remove('open');
+  els.detailModal.setAttribute('aria-hidden', 'true');
+}
+
 function render() {
   const q = state.filter.trim().toLowerCase();
   const items = state.markets.filter(c => {
@@ -408,7 +569,8 @@ function render() {
       const forecast = c.current_price * (1 + expRet);
       const confidence = Math.max(sig.confidence, Math.abs(prob - 0.5) * 2 * 0.8 + 0.2);
       const adx = pred.adx; const plusDi = pred['+di']; const minusDi = pred['-di'];
-      sig = { ...sig, label, cls, forecast, confidence, model: { prob, expRet, adx, plusDi, minusDi } };
+      const q1h = pred.q1h || null;
+      sig = { ...sig, label, cls, forecast, confidence, model: { prob, expRet, adx, plusDi, minusDi, q1h } };
     }
     const forecastPct = sig.forecast ? ((sig.forecast - c.current_price) / c.current_price) * 100 : null;
     card.innerHTML = `
@@ -444,6 +606,17 @@ function render() {
         ${sig.model && sig.model.adx ? `<div title="Average Directional Index">🧭 ADX: <strong>${Number(sig.model.adx).toFixed(0)}</strong>${(sig.model.plusDi!=null && sig.model.minusDi!=null) ? ` <span class="${sig.model.plusDi>=sig.model.minusDi ? 'pos' : 'neg'}">${sig.model.plusDi>=sig.model.minusDi ? '+DI' : '-DI'}</span>` : ''}</div>` : ''}
       </div>
     `;
+    // Add Details button
+    const btnRow = document.createElement('div');
+    btnRow.className = 'row';
+    btnRow.style.justifyContent = 'flex-end';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-details';
+    btn.textContent = 'Details';
+    btn.addEventListener('click', () => openDetailModal(c, spark, sig));
+    btnRow.appendChild(btn);
+    card.appendChild(btnRow);
+
     // Append 1h TP/SL targets
     const targets1h = computeTargets1h(spark, c.current_price, sig);
     if (targets1h) {
@@ -575,3 +748,14 @@ if (els.showQr && els.qrImg && els.donateAddr) {
 
 // Initial load
 loadPredictionsOnce().finally(refresh);
+
+// Modal close handlers
+if (els.detailClose && els.detailModal) {
+  els.detailClose.addEventListener('click', closeDetailModal);
+  els.detailModal.addEventListener('click', (e) => {
+    if (e.target === els.detailModal) closeDetailModal();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && els.detailModal.classList.contains('open')) closeDetailModal();
+  });
+}

@@ -16,11 +16,11 @@ Output:
 
 Note: This runs on GitHub Actions (network available). Locally, it may fail without network.
 """
-import json, math, time, urllib.request, urllib.error
+import json, math, time, os, urllib.request, urllib.error, urllib.parse
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import roc_auc_score
 
@@ -198,6 +198,7 @@ def build_features(ohlcv: Dict[str, List[float]], btc_ohlcv: Optional[Dict[str, 
     bbw = bb_width(c, 20, 2)
     atr14 = atr(h, l, c, 14)
     adx14, plus_di, minus_di = adx(h, l, c, 14)
+    mom1 = np.concatenate(([np.nan]*1, c[1:] / c[:-1] - 1))
     mom24 = np.concatenate(([np.nan]*H_FWD, c[H_FWD:] / c[:-H_FWD] - 1))
     vol_change = np.concatenate(([np.nan], v[1:] / np.where(v[:-1]==0, np.nan, v[:-1]) - 1))
     cols = [
@@ -216,10 +217,12 @@ def build_features(ohlcv: Dict[str, List[float]], btc_ohlcv: Optional[Dict[str, 
     if bc is not None:
         btc_ema7 = ema(bc, 7); btc_ema14 = ema(bc, 14)
         btc_trend = (btc_ema7 / btc_ema14) - 1
+        btc_mom1 = np.concatenate(([np.nan]*1, bc[1:] / bc[:-1] - 1))
         btc_mom24 = np.concatenate(([np.nan]*H_FWD, bc[H_FWD:] / bc[:-H_FWD] - 1))
         btc_atr14 = atr(bh, bl, bc, 14) / bc
         rel_mom24 = mom24 - btc_mom24
-        cols.extend([btc_trend, btc_mom24, rel_mom24, btc_atr14])
+        rel_mom1 = mom1 - btc_mom1
+        cols.extend([btc_trend, btc_mom24, rel_mom24, btc_atr14, rel_mom1])
     X = np.column_stack(cols)
     # Label: forward 24h return sign
     y = np.where(mom24 > 0, 1, 0)
@@ -227,10 +230,11 @@ def build_features(ohlcv: Dict[str, List[float]], btc_ohlcv: Optional[Dict[str, 
     mask = ~np.isnan(X).any(axis=1) & ~np.isnan(y)
     X = X[mask]
     y = y[mask]
+    ret1 = mom1[mask]
     ret24 = mom24[mask]
     # last index mapping for later
     last_idx = mask.nonzero()[0][-1] if mask.any() else None
-    return X, y, ret24, last_idx, {
+    return X, y, ret1, ret24, last_idx, {
         "adx": float(adx14[~np.isnan(adx14)][-1]) if np.any(~np.isnan(adx14)) else None,
         "+di": float(plus_di[~np.isnan(plus_di)][-1]) if np.any(~np.isnan(plus_di)) else None,
         "-di": float(minus_di[~np.isnan(minus_di)][-1]) if np.any(~np.isnan(minus_di)) else None,
@@ -291,6 +295,63 @@ def train_and_predict(X: np.ndarray, y: np.ndarray, ret24: np.ndarray) -> Tuple[
     exp_ret = float((2 * prob - 1) * med_abs)
     return prob, exp_ret, auc
 
+def fit_quantiles_1h(X: np.ndarray, ret1: np.ndarray) -> Optional[Dict[str, float]]:
+    mask = ~np.isnan(ret1)
+    Xq = X[mask]
+    yq = ret1[mask]
+    if yq.size < 200:
+        return None
+    params = dict(loss='quantile', n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42)
+    out = {}
+    for alpha, key in [(0.2, 'q20'), (0.5, 'q50'), (0.8, 'q80')]:
+        model = GradientBoostingRegressor(alpha=alpha, **params)
+        model.fit(Xq, yq)
+        out[key] = float(model.predict(X[-1:])[0])
+    return out
+
+def post_alerts(preds: Dict[str, dict]):
+    high = float(os.environ.get('ALERT_PROB_HIGH', '0.65'))
+    low = float(os.environ.get('ALERT_PROB_LOW', '0.35'))
+    rows = []
+    for cid, p in preds.get('coins', {}).items():
+        prob = p.get('prob_up')
+        if prob is None:
+            continue
+        if prob >= high or prob <= low:
+            exp = p.get('exp_return')
+            adx = p.get('adx')
+            rows.append((cid, prob, exp, adx))
+    if not rows:
+        return
+    rows.sort(key=lambda r: abs(r[1] - 0.5), reverse=True)
+    rows = rows[:5]
+    lines = [f"{('🟢' if prob>=0.5 else '🔴')} {cid}: {prob*100:.0f}% | Exp: {(exp or 0)*100:.1f}%" + (f" | ADX {int(adx)}" if adx is not None else '') for cid, prob, exp, adx in rows]
+    text = "Strong signals (next 24h):\n" + "\n".join(lines)
+    # Telegram
+    tg_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    tg_chat = os.environ.get('TELEGRAM_CHAT_ID')
+    if tg_token and tg_chat:
+        url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+        body = urllib.parse.urlencode({
+            'chat_id': tg_chat,
+            'text': text,
+            'disable_web_page_preview': 'true'
+        }).encode()
+        try:
+            req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+            urllib.request.urlopen(req, timeout=15).read()
+        except Exception:
+            pass
+    # Discord
+    disc = os.environ.get('DISCORD_WEBHOOK_URL')
+    if disc:
+        try:
+            data = json.dumps({'content': text}).encode()
+            req = urllib.request.Request(disc, data=data, headers={'Content-Type': 'application/json'})
+            urllib.request.urlopen(req, timeout=15).read()
+        except Exception:
+            pass
+
 def fallback_prices_predict(prices: List[float]):
     # Simple heuristic fallback if Binance data unavailable
     if len(prices) < 60:
@@ -320,10 +381,13 @@ def main():
         ohlcv = binance_klines(symbol)
         if ohlcv:
             try:
-                X, y, ret24, last_idx, extras = build_features(ohlcv, btc_ohlcv)
+                X, y, ret1, ret24, last_idx, extras = build_features(ohlcv, btc_ohlcv)
                 if len(y) >= 50:
                     prob, exp_ret, auc = train_and_predict(X, y, ret24)
                     coin_entry = {"prob_up": float(prob), "exp_return": float(exp_ret), "auc": auc}
+                    q1h = fit_quantiles_1h(X, ret1)
+                    if q1h:
+                        coin_entry['q1h'] = q1h
                     if extras.get("adx") is not None:
                         coin_entry.update({"adx": extras.get("adx"), "+di": extras.get("+di"), "-di": extras.get("-di")})
                     out["coins"][cid] = coin_entry
@@ -337,6 +401,8 @@ def main():
             out["coins"][cid] = fb
     with open("predictions.json", "w") as f:
         json.dump(out, f, separators=(",", ":"))
+    # optional alerts
+    post_alerts(out)
 
 if __name__ == "__main__":
     main()
