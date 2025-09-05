@@ -368,7 +368,8 @@ function render() {
       const cls = label === 'Bullish' ? 'bull' : label === 'Bearish' ? 'bear' : 'neutral';
       const forecast = c.current_price * (1 + expRet);
       const confidence = Math.max(sig.confidence, Math.abs(prob - 0.5) * 2 * 0.8 + 0.2);
-      sig = { ...sig, label, cls, forecast, confidence, model: { prob, expRet } };
+      const adx = pred.adx; const plusDi = pred['+di']; const minusDi = pred['-di'];
+      sig = { ...sig, label, cls, forecast, confidence, model: { prob, expRet, adx, plusDi, minusDi } };
     }
     const forecastPct = sig.forecast ? ((sig.forecast - c.current_price) / c.current_price) * 100 : null;
     card.innerHTML = `
@@ -401,6 +402,7 @@ function render() {
         <div title="Bollinger %B">BB%B: <strong>${sig.indicators?.bb ? (sig.indicators.bb.pctB * 100).toFixed(0) : '—'}</strong></div>
         <div title="ATR approx %">ATR%: <strong>${sig.indicators?.atr && c.current_price ? ((sig.indicators.atr / c.current_price) * 100).toFixed(1) : '—'}</strong></div>
         ${sig.model ? `<div title="Model probability">Model: <strong>${(sig.model.prob * 100).toFixed(0)}%</strong> ↑ • Exp: <strong>${(sig.model.expRet * 100).toFixed(1)}%</strong></div>` : ''}
+        ${sig.model && sig.model.adx ? `<div title="Average Directional Index">ADX: <strong>${Number(sig.model.adx).toFixed(0)}</strong>${(sig.model.plusDi!=null && sig.model.minusDi!=null) ? ` <span class="${sig.model.plusDi>=sig.model.minusDi ? 'pos' : 'neg'}">${sig.model.plusDi>=sig.model.minusDi ? '+DI' : '-DI'}</span>` : ''}</div>` : ''}
       </div>
     `;
     els.cards.appendChild(card);

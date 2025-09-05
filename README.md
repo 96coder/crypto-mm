@@ -51,9 +51,17 @@ Option B: Deploy from branch (no Actions)
 
 Predictions Pipeline (optional)
 - Workflow: `.github/workflows/predict.yml` runs every 6 hours (and on manual dispatch).
-- Script: `scripts/predict.py` fetches hourly prices for top 25 coins from CoinGecko and writes `predictions.json`.
-- Frontend: If `predictions.json` exists, the app shows model probability and expected 24h return per coin and blends it into the signal.
-- Tuning: The script uses a heuristic score mapped to probability; you can replace it with a trained model later.
+- Script: `scripts/predict.py` builds a dataset per coin:
+  - Data: Paginates Binance 1h klines to ~5000 bars (~200 days) for USDT pairs; gracefully falls back to CoinGecko hourly prices if missing.
+  - Features: EMA(7/14/50), RSI(14), MACD(12/26/9), Bollinger width, ATR% (Wilder), ADX(14) with +DI/−DI, 24h momentum, volume change, plus BTC regime features (BTC EMA7/EMA14 trend, BTC 24h momentum, relative momentum vs BTC, BTC ATR%).
+  - Model: HistGradientBoostingClassifier with TimeSeriesSplit (walk‑forward) for AUC; tuned params with early stopping. Retrains on all data for the latest prediction. Outputs `prob_up`, `exp_return` (scaled by median |24h return|), `auc`, and latest `adx`/`+di`/`-di` when OHLCV is available.
+- Frontend: If `predictions.json` exists, the app shows model probability and expected 24h return per coin and blends it into the combined signal.
+  - Also surfaces ADX and DI direction from predictions when available.
+- Tuning: Adjust TOP_N, MAX_BARS, and model hyperparams in the script as desired.
+
+ Notes
+ - ADX and ATR use true OHLC ranges; these require exchange OHLCV (Binance). If a symbol is unavailable, the script falls back gracefully.
+ - The pipeline paginates Binance klines to increase history (~200 days by default).
 
 Disclaimer
 This project is for educational purposes only. No financial advice.
