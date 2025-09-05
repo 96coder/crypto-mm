@@ -12,6 +12,11 @@ const els = {
   search: document.getElementById('search'),
   refreshBtn: document.getElementById('refreshBtn'),
   autorefresh: document.getElementById('autorefresh'),
+  copyDonate: document.getElementById('copyDonate'),
+  donateAddr: document.getElementById('donateAddr'),
+  copyToast: document.getElementById('copyToast'),
+  showQr: document.getElementById('showQr'),
+  qrImg: document.getElementById('qrImg'),
 };
 
 let state = {
@@ -532,6 +537,41 @@ els.search.addEventListener('input', () => {
 });
 els.refreshBtn.addEventListener('click', () => refresh());
 els.autorefresh.addEventListener('change', () => setAutoRefresh(Number(els.autorefresh.value)));
+
+if (els.copyDonate) {
+  const addr = () => (els.donateAddr?.textContent || '').trim();
+  els.copyDonate.addEventListener('click', async () => {
+    const text = addr();
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      }
+      if (els.copyToast) { els.copyToast.hidden = false; setTimeout(()=> els.copyToast.hidden = true, 1200); }
+    } catch (e) {
+      console.warn('Copy failed', e);
+    }
+  });
+}
+
+if (els.showQr && els.qrImg && els.donateAddr) {
+  const buildQrUrl = (text) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(text)}`;
+  els.showQr.addEventListener('click', () => {
+    const currentHidden = els.qrImg.hasAttribute('hidden');
+    if (currentHidden) {
+      const text = (els.donateAddr.textContent || '').trim();
+      els.qrImg.src = buildQrUrl(text);
+      els.qrImg.removeAttribute('hidden');
+      els.showQr.textContent = 'Hide QR';
+    } else {
+      els.qrImg.setAttribute('hidden', '');
+      els.showQr.textContent = 'Show QR';
+    }
+  });
+}
 
 // Initial load
 loadPredictionsOnce().finally(refresh);

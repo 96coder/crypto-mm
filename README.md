@@ -68,3 +68,6 @@ Predictions Pipeline (optional)
 
 Disclaimer
 This project is for educational purposes only. No financial advice.
+
+Support / Donations
+- USDT (TRC20): `TLbwVrZyaZujcTCXAb94t6k7BrvChVfxzi`

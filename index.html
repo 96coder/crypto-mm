@@ -72,9 +72,16 @@
       <div>
         Built with plain HTML/CSS/JS — no frameworks.
       </div>
+      <div class="donate">
+        <span>❤️ Donate USDT (TRC20):</span>
+        <span class="mono" id="donateAddr">TLbwVrZyaZujcTCXAb94t6k7BrvChVfxzi</span>
+        <button id="copyDonate" class="copy-btn" title="Copy address">Copy</button>
+        <button id="showQr" class="copy-btn" title="Show QR code">Show QR</button>
+        <img id="qrImg" class="qr-img" alt="USDT (TRC20) QR code" hidden />
+        <span id="copyToast" class="copy-toast" aria-live="polite" hidden>Copied!</span>
+      </div>
     </footer>
 
     <script src="app.js"></script>
   </body>
   </html>
-
