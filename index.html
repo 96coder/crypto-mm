@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Crypto Myanmar — Market Tracker & Signals</title>
+    <meta name="description" content="Track major crypto prices with simple trend signals and forecasts." />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">₿</div>
+        <div class="titles">
+          <h1>Crypto Myanmar</h1>
+          <p class="subtitle">Market tracker with simple predictions</p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="currency">Currency</label>
+          <select id="currency">
+            <option value="usd" selected>USD</option>
+            <option value="mmk">MMK</option>
+            <option value="eur">EUR</option>
+            <option value="sgd">SGD</option>
+            <option value="jpy">JPY</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="search">Search</label>
+          <input id="search" type="search" placeholder="Search coins..." />
+        </div>
+        <div class="control-group">
+          <label for="autorefresh">Auto Refresh</label>
+          <select id="autorefresh">
+            <option value="0" selected>Off</option>
+            <option value="30">30s</option>
+            <option value="60">1m</option>
+            <option value="300">5m</option>
+          </select>
+        </div>
+        <button id="refreshBtn" class="primary">Refresh</button>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="status" class="status">
+        <span id="statusText">Loading markets…</span>
+      </section>
+
+      <section class="legend">
+        <div>
+          <strong>Signal</strong>: quick, heuristic view (not financial advice)
+        </div>
+        <div class="legend-items">
+          <span class="badge bull">Bullish</span>
+          <span class="badge bear">Bearish</span>
+          <span class="badge neutral">Neutral</span>
+        </div>
+      </section>
+
+      <section id="cards" class="cards"></section>
+    </main>
+
+    <footer class="app-footer">
+      <div>
+        Data by <a href="https://www.coingecko.com/en/api" target="_blank" rel="noreferrer noopener">CoinGecko API</a> •
+        Signals are experimental and for education only.
+      </div>
+      <div>
+        Built with plain HTML/CSS/JS — no frameworks.
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+
